@@ -71,8 +71,8 @@ class DXCamera:
         frame = self._grab(region)
         return frame
 
-    def _grab(self, region: Tuple[int, int, int, int]):
-        if self._duplicator.update_frame():
+    def _grab(self, region: Tuple[int, int, int, int],frame_timeout=0):
+        if self._duplicator.update_frame(frame_timeout):
             if not self._duplicator.updated:
                 return None
             self._device.im_context.CopyResource(

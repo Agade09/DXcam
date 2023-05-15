@@ -18,12 +18,13 @@ class Duplicator:
         self.duplicator = ctypes.POINTER(IDXGIOutputDuplication)()
         output.output.DuplicateOutput(device.device, ctypes.byref(self.duplicator))
 
-    def update_frame(self):
+    def update_frame(self,frame_timeout=0):
         info = DXGI_OUTDUPL_FRAME_INFO()
         res = ctypes.POINTER(IDXGIResource)()
         try:
+            self.release_frame()
             self.duplicator.AcquireNextFrame(
-                0,
+                ctypes.c_uint32(frame_timeout),
                 ctypes.byref(info),
                 ctypes.byref(res),
             )
@@ -43,10 +44,13 @@ class Duplicator:
         return True
 
     def release_frame(self):
-        self.duplicator.ReleaseFrame()
+        if self.updated:
+            self.duplicator.ReleaseFrame()
+            self.updated=False
 
     def release(self):
         if self.duplicator is not None:
+            #self.release_frame()
             self.duplicator.Release()
             self.duplicator = None
 
