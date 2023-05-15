@@ -63,7 +63,7 @@ class DXCamera:
         self.__frame_count = 0
         self.__capture_start_time = 0
 
-    def grab(self, region: Tuple[int, int, int, int] = None):
+    def grab(self, region: Tuple[int, int, int, int] = None,frame_timeout=0):
         if region is None:
             region = self.region
         else:
