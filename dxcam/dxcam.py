@@ -5,6 +5,7 @@ from threading import Thread, Event, Lock
 import comtypes
 import numpy as np
 from dxcam.core import Device, Output, StageSurface, Duplicator
+from dxcam._libs.d3d11 import D3D11_BOX
 from dxcam.processor import Processor
 from dxcam.util.timer import (
     create_high_resolution_timer,
@@ -63,21 +64,34 @@ class DXCamera:
         self.__frame_count = 0
         self.__capture_start_time = 0
 
-    def grab(self, region: Tuple[int, int, int, int] = None,frame_timeout=0):
+    def grab(self, region: Tuple[int, int, int, int] = None,frame_timeout: int = 0):
         if region is None:
             region = self.region
         else:
             self._validate_region(region)
-        frame = self._grab(region)
-        return frame
+        return self._grab(region)
 
-    def _grab(self, region: Tuple[int, int, int, int],frame_timeout=0):
+    def region_to_memory_region(self, region: Tuple[int, int, int, int], rotation_angle: int, output: Output):
+        if rotation_angle==0:
+            return region
+        elif rotation_angle==90: #Axes (X,Y) -> (-Y,X)
+            return (region[1],output.surface_size[1]-region[2],region[3],output.surface_size[1]-region[0])
+        elif rotation_angle==180: #Axes (X,Y) -> (-X,-Y)
+            return (output.surface_size[0]-region[2],output.surface_size[1]-region[3],output.surface_size[0]-region[0],output.surface_size[1]-region[1])
+        else: #rotation_angle==270 Axes (X,Y) -> (Y,-X)
+            return (output.surface_size[0]-region[3],region[0],output.surface_size[0]-region[1],region[2])
+
+    def _grab(self, region: Tuple[int, int, int, int],frame_timeout: int = 0):
         if self._duplicator.update_frame(frame_timeout):
             if not self._duplicator.updated:
                 return None
-            self._device.im_context.CopyResource(
-                self._stagesurf.texture, self._duplicator.texture
-            )
+            memory_region = self.region_to_memory_region(region,self.rotation_angle,self._output)
+            memory_region_width = memory_region[2]-memory_region[0]
+            memory_region_height = memory_region[3]-memory_region[1]
+            if self._stagesurf.width != memory_region_width or self._stagesurf.height != memory_region_height:
+                self._stagesurf.release()
+                self._stagesurf.rebuild(output=self._output, device=self._device, dim=(memory_region_width,memory_region_height))
+            self._device.im_context.CopySubresourceRegion(self._stagesurf.texture, 0, 0, 0, 0, self._duplicator.texture, 0, D3D11_BOX(memory_region[0],memory_region[1],0,memory_region[2],memory_region[3],1))
             self._duplicator.release_frame()
             rect = self._stagesurf.map()
             frame = self._processor.process(

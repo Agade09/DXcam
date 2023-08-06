@@ -4,6 +4,7 @@ from dxcam._libs.d3d11 import *
 from dxcam._libs.dxgi import *
 from dxcam.core.device import Device
 from dxcam.core.output import Output
+from time import sleep
 
 
 @dataclass
@@ -18,7 +19,7 @@ class Duplicator:
         self.duplicator = ctypes.POINTER(IDXGIOutputDuplication)()
         output.output.DuplicateOutput(device.device, ctypes.byref(self.duplicator))
 
-    def update_frame(self,frame_timeout=0):
+    def update_frame(self,frame_timeout: int = 0):
         info = DXGI_OUTDUPL_FRAME_INFO()
         res = ctypes.POINTER(IDXGIResource)()
         try:
@@ -29,7 +30,10 @@ class Duplicator:
                 ctypes.byref(res),
             )
         except comtypes.COMError as ce:
-            if ctypes.c_int32(DXGI_ERROR_ACCESS_LOST).value == ce.args[0]:
+            if ctypes.c_int32(DXGI_ERROR_ACCESS_LOST).value == ce.args[0] or ctypes.c_int32(ABANDONED_MUTEX_EXCEPTION).value == ce.args[0]:
+                self.release()  # Release resources before reinitializing
+                sleep(0.1)
+                self.__post_init__(self.output, self.device)
                 return False
             if ctypes.c_int32(DXGI_ERROR_WAIT_TIMEOUT).value == ce.args[0]:
                 self.updated = False
